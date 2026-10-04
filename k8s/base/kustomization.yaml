@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: three-tier-app
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+resources:
+  - serviceaccount.yaml
+  - secretproviderclass.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+
+configMapGenerator:
+  - name: api-config
+    literals:
+      - PORT=3000
+      - LOG_LEVEL=info
+      - PGPORT=5432
+      - PGDATABASE=app
+      - PGSSLMODE=require
+      - PGPOOL_MAX=10
+
+images:
+  - name: api
+    newName: REPLACE_ME.azurecr.io/three-tier/api
+    newTag: latest
+  - name: frontend
+    newName: REPLACE_ME.azurecr.io/three-tier/frontend
+    newTag: latest

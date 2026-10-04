@@ -1,0 +1,75 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: three-tier-dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+# Environment-specific values (Key Vault, identity, hostname).
+# The deploy workflow overwrites params.env from Terraform outputs before `kustomize build`.
+configMapGenerator:
+  - name: deploy-params
+    envs:
+      - params.env
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        # Used only as a replacements source; never applied to the cluster.
+        config.kubernetes.io/local-config: "true"
+
+patches:
+  - target: { kind: ConfigMap, name: api-config }
+    patch: |-
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: debug
+  - target: { kind: Deployment, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: Deployment, name: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  - target: { kind: PodDisruptionBudget }
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  - target: { kind: Ingress, name: app }
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging
+
+replacements:
+  - source: { kind: ConfigMap, name: deploy-params, fieldPath: data.KEYVAULT_NAME }
+    targets:
+      - select: { kind: SecretProviderClass, name: api-db }
+        fieldPaths: [spec.parameters.keyvaultName]
+  - source: { kind: ConfigMap, name: deploy-params, fieldPath: data.TENANT_ID }
+    targets:
+      - select: { kind: SecretProviderClass, name: api-db }
+        fieldPaths: [spec.parameters.tenantId]
+  - source: { kind: ConfigMap, name: deploy-params, fieldPath: data.WORKLOAD_CLIENT_ID }
+    targets:
+      - select: { kind: SecretProviderClass, name: api-db }
+        fieldPaths: [spec.parameters.clientID]
+      - select: { kind: ServiceAccount, name: api }
+        fieldPaths: ["metadata.annotations.[azure.workload.identity/client-id]"]
+  - source: { kind: ConfigMap, name: deploy-params, fieldPath: data.APP_HOST }
+    targets:
+      - select: { kind: Ingress, name: app }
+        fieldPaths: [spec.rules.0.host, spec.tls.0.hosts.0]

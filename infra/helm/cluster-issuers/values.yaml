@@ -1,0 +1,3 @@
+# Overridden by Terraform (infra/terraform/helm.tf).
+email: platform-team@example.com
+ingressClass: nginx

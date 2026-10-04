@@ -1,0 +1,53 @@
+# Local development stack: http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  migrate:
+    build: ./api
+    command: ["node", "src/migrate.js"]
+    environment: &api-env
+      PGHOST: db
+      PGDATABASE: app
+      PGUSER: app
+      PGPASSWORD: app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./api
+    environment:
+      <<: *api-env
+      LOG_LEVEL: debug
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_UPSTREAM: api:3000
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
